@@ -1,5 +1,8 @@
 using ASP
-using Base.Test
+using FactCheck
 
-# write your own tests here
-@test 1 == 1
+tests = ["as_nnls"]
+
+for t in tests
+    include("$(t).jl")
+end

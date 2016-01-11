@@ -1,5 +1,10 @@
 module ASP
 
-# package code goes here
+using QRupdate
 
-end # module
+export bpdual, as_bpdn, as_nnls, OptimResults
+
+include("BPdual.jl")
+include("solvers.jl")
+
+end
