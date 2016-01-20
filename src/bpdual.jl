@@ -524,10 +524,11 @@ end # function objectives
 # The optimality conditions are given by
 #
 #   [ -λ I   S ] [dy] = [ h ], with  h = b - lam y - S x, 
-#   [     S'        ] [dx]   [ 0 ]
+#   [   S'     ] [dx]   [ 0 ]
 #
 # where x is an estimate of the Lagrange multiplier. Thus, dx solves
-# min ||S dx - h||. On input, g = b - lam y.
+# min ||S dx - h||. On input, g = b - lam y. Alternatively, solve the LS problem
+# min ||S  x - g||.
 # ----------------------------------------------------------------------
 function newtonstep(S, R, g, x, λ)
     m, n = size(S)
@@ -535,7 +536,7 @@ function newtonstep(S, R, g, x, λ)
         dy = g/λ            # Steepest descent
         return (x, dy)
     end
-    x, dr = csne(R,S,g)    # LS problem  min ||S dx - h||
+    x, dr = csne(R,S,g)     # LS problem
     if m > n                # Overdetermined system
         dy = dr/λ           # dy is the scaled residual
     else                    # System is square or underdetermined
