@@ -12,20 +12,14 @@ Solve the nonnegative least-squares problem.
    AS_NNLS(A,B,C,OPTS) specifies options that can be set using
    AS_SETPARMS.
 
-   AS_NNLS(A,B,C,OPTS,INFORM) uses information stored in INFORM
-   (from a previous call to AS_NNLS) to warm-start the
-   algorithm. Note that the previous call to AS_NNLS must have been
-   to a problem with the same A and C.
-
-   In all cases, the INFORM output argument is optional, and contains
-   statistics on the solution process.
+   The INFORM output argument contains statistics on the solution
+   process.
 
    Inputs
    A       is an m-by-n matrix, explicit or an operator.
    B       is an m-vector.
    C       is an n-vector.
    OPTS    is an options structure created using AS_SETPARMS.
-   INFORM  is an information structure from a previous call to AS_NNLS.
 
    Example
    m = 600; n = 2560; k = 20;    % No. of rows, columns, and nonzeros
@@ -38,19 +32,79 @@ Solve the nonnegative least-squares problem.
 
    See also `bpdual`.
 """
-function as_nnls(A::AbstractMatrix, b::Vector, kwargs...)
+function as_nnls(A, b::Vector, kwargs...)
 
     m, n = size(A)
     bl = -Inf*ones(n)
     bu =     zeros(n)
     λ = 1.0
     
-    (xx, r, inform) = bpdual(A, b, λ, bl, bu; kwargs...)
+    xx, r, inform = bpdual(A, b, λ, bl, bu; kwargs...)
 
     # BPdual's solution xx only contains nonzero elements.
-    # Make it full length.
-    x = zeros(n)
-    x[inform.active] = xx
+    x = xscatter(xx, n, inform.active)
 
     return (x, r, inform)
 end # function as_nnls
+
+"""
+Solve a least-squares problem over the simplex. The call
+
+    (x, inform) = as_simplex(A, b, τ)
+
+solves the problem
+
+     minimize  ½||Ax-b||^2  subj to  sum(x) = τ, x ≥ 0.
+
+See also `as_nnls`, `bpdual`.
+"""
+function as_simplex(A, b::Vector, τ; kwargs...)
+
+    m, n = size(A)
+    bl = -Inf*ones(n)
+    bu =     zeros(n)
+    λ = 1.0
+    λ₀ = 1e-5#√eps(1.0)
+        
+    function Aprod(x)
+        z = Array{Float64}(m+1)
+        z[1:m] = A*x
+        z[m+1] = sum(x)/λ₀
+        return z
+    end
+
+    function Atran(y)
+        z = A'*y[1:m] + y[m+1]/λ₀
+    end
+
+    Abar = LinearOperator(m+1, n, Float64, false, false,
+                          x->Aprod(x),
+                          Nullable{Function}(),
+                          y->Atran(y))
+    bbar = [ b; τ/λ₀ ]
+
+    xx, r, inform = bpdual(Abar, bbar, λ, bl, bu; kwargs...)
+
+    x = xscatter(xx, n, inform.active) # scatter xx to full size x
+    deleteat!(r, m+1)                  # remove artificial residual
+
+    # check kkt conditions.
+    μ = dot(x,A'*r) / τ # multiplier
+    z = A'*r - μ      # reduced costs
+    
+    @printf(" %-20s: %8.1e\n","Pr infeasibility",
+            max(sum(x) - τ, 0))
+    @printf(" %-20s: %8.1e\n","Du infeasibility",
+            norm(min(x,z),Inf)/max(norm(x),norm(z),1))
+    @printf("\n")
+    
+    return (x, r, inform)
+    
+end
+
+# Scatter short vector to full-length vector.
+function xscatter(x, n, active)
+    z = zeros(n)
+    z[active] = x
+    return z
+end
